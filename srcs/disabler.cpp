@@ -129,7 +129,5 @@ bool initialize_disabler() {
         MH_Uninitialize();
         return false;
     }
-
-    OutputDebugStringA("pala: successfully done hooks.");
     return true;
 }
