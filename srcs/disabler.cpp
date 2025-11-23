@@ -4,13 +4,15 @@
 #include "disabler.h"
 #include "MinHook.h"
 
-#define PALADIUM_CHECK_CLASS_FN 0x813D6C0
-#define PALADIUM_CHECK_LIB_FN   0x80D87F0
-#define PALADIUM_JVM_ADDR       0x8771630
+#define PALADIUM_CHECK_CLASS_FN 0x813c790
+#define PALADIUM_CHECK_CLASS_2_FN 0x815C0B0
+// #define PALADIUM_CHECK_LIB_FN   0x80D87F0
+#define PALADIUM_JVM_ADDR       0x876E630
 #define JVM_DLL_IMAGE_BASE      0x8000000
 
 typedef bool(*t_paladium_check_class_fn)(void* path);
 t_paladium_check_class_fn orig_paladium_check_class_fn = nullptr;
+t_paladium_check_class_fn orig_paladium_check_class_2_fn = nullptr;
 
 bool __fastcall hk_check_class(void *path) {
     // Paladium's JVM blocks any jni calls that try to access to ehacks.* and net.minecraft.* (except if it's net.minecraft.launchwrapper.*).
@@ -30,13 +32,13 @@ HANDLE __stdcall hk_create_thread(LPSECURITY_ATTRIBUTES lpThreadAttributes, SIZE
 typedef char(__fastcall *t_check_lib)(LPCCH);
 t_check_lib orig_check_lib = nullptr;
 
-char __fastcall hk_check_lib(LPCCH lib) {
-    // Simple trusted dll check
-    // If it's not inside some .paladium folders, not from System32/SysWOW64 and not signed, then it's not trusted.
-    // We are simply hooking and making the func always return 1 (saying that every DLL is trusted, basically.)
-//    orig_check_lib(lib);
-    return 1;
-}
+// char __fastcall hk_check_lib(LPCCH lib) {
+//     // Simple trusted dll check
+//     // If it's not inside some .paladium folders, not from System32/SysWOW64 and not signed, then it's not trusted.
+//     // We are simply hooking and making the func always return 1 (saying that every DLL is trusted, basically.)
+// //    orig_check_lib(lib);
+//     return 1;
+// }
 
 typedef __int64(__fastcall *t_jni_get_created_java_vms)(void **vms_buffer, int buf_len, int *num_vms);
 t_jni_get_created_java_vms orig_jni_get_created_java_vms = nullptr;
@@ -63,7 +65,8 @@ bool create_hooks(HMODULE jvm_handle, uintptr_t jvm_addr) {
     const auto jni_get_created_java_vms_fn = GetProcAddress(jvm_handle, "JNI_GetCreatedJavaVMs");
     const auto create_thread_fn = GetProcAddress(kernel32, "CreateThread");
     const auto check_class_fn = jvm_addr + PALADIUM_CHECK_CLASS_FN - JVM_DLL_IMAGE_BASE;
-    const auto check_lib_fn = jvm_addr + PALADIUM_CHECK_LIB_FN - JVM_DLL_IMAGE_BASE;
+    const auto check_class_2_fn = jvm_addr + PALADIUM_CHECK_CLASS_2_FN - JVM_DLL_IMAGE_BASE;
+    // const auto check_lib_fn = jvm_addr + PALADIUM_CHECK_LIB_FN - JVM_DLL_IMAGE_BASE;
     int err;
 
     if ((err = MH_CreateHook(
@@ -76,13 +79,22 @@ bool create_hooks(HMODULE jvm_handle, uintptr_t jvm_addr) {
     }
 
     if ((err = MH_CreateHook(
-            reinterpret_cast<void*>(check_lib_fn),
-            reinterpret_cast<LPVOID>(&hk_check_lib),
-            reinterpret_cast<void**>(&orig_check_lib))
-        ) != MH_OK) {
-        OutputDebugStringA(std::format("pala: could not create check lib hook fn. minhook err: {}", err).c_str());
+        reinterpret_cast<void*>(check_class_2_fn),
+        reinterpret_cast<LPVOID>(&hk_check_class),
+        reinterpret_cast<void**>(&orig_paladium_check_class_2_fn))
+         ) != MH_OK) {
+        OutputDebugStringA(std::format("pala: could not create hook check class 2 fn. minhook err: {}", err).c_str());
         return false;
-    }
+         }
+
+    // if ((err = MH_CreateHook(
+    //         reinterpret_cast<void*>(check_lib_fn),
+    //         reinterpret_cast<LPVOID>(&hk_check_lib),
+    //         reinterpret_cast<void**>(&orig_check_lib))
+    //     ) != MH_OK) {
+    //     OutputDebugStringA(std::format("pala: could not create check lib hook fn. minhook err: {}", err).c_str());
+    //     return false;
+    // }
 
     if ((err = MH_CreateHook(
             reinterpret_cast<void*>(create_thread_fn),
