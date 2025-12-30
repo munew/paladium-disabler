@@ -1,0 +1,41 @@
+name: Build and Release disabler.dll
+
+on:
+  push:
+    tags:
+      - '*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup MSVC environment
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Build with nmake
+        run: |
+          nmake
+
+      - name: Verify output
+        shell: cmd
+        run: |
+          if not exist bin\disabler.dll (
+            echo disabler.dll not found
+            exit 1
+          )
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: bin/disabler.dll
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
